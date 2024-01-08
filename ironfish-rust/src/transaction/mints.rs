@@ -55,6 +55,18 @@ impl MintBuilder {
         self
     }
 
+    pub fn build_circuit(
+        &self,
+        spender_key: &SaplingKey,
+        public_key_randomness: &jubjub::Fr,
+    ) -> Result<MintAsset, IronfishError> {
+        let circuit = MintAsset {
+            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            public_key_randomness: Some(*public_key_randomness),
+        };
+        Ok(circuit)
+    }
+
     pub fn build(
         &self,
         spender_key: &SaplingKey,

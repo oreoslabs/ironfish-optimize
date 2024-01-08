@@ -33,7 +33,7 @@ use ironfish_zkp::{
         NATIVE_VALUE_COMMITMENT_GENERATOR, SPENDING_KEY_GENERATOR,
         VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
     },
-    redjubjub::{self, PrivateKey, PublicKey, Signature},
+    redjubjub::{self, PrivateKey, PublicKey, Signature}, proofs::{Spend, Output, MintAsset},
 };
 
 use std::{
@@ -277,6 +277,78 @@ impl ProposedTransaction {
     /// Set the sequence to expire the transaction from the mempool.
     pub fn set_expiration(&mut self, sequence: u32) {
         self.expiration = sequence;
+    }
+
+    pub fn build_circuits(
+        &mut self,
+        change_goes_to: Option<PublicAddress>,
+        intended_transaction_fee: u64
+    ) -> Result<(Vec<Spend>, Vec<Output>, Vec<MintAsset>), IronfishError> {
+        let mut change_notes = vec![];
+
+        for (asset_id, value) in self.value_balances.iter() {
+            let is_native_asset = asset_id == &NATIVE_ASSET;
+
+            let change_amount = match is_native_asset {
+                true => *value - i64::try_from(intended_transaction_fee)?,
+                false => *value,
+            };
+
+            if change_amount < 0 {
+                return Err(IronfishError::new(IronfishErrorKind::InvalidBalance));
+            }
+            if change_amount > 0 {
+                let change_address =
+                    change_goes_to.unwrap_or_else(|| self.spender_key.public_address());
+                let change_note = Note::new(
+                    change_address,
+                    change_amount as u64, // we checked it was positive
+                    "",
+                    *asset_id,
+                    self.spender_key.public_address(),
+                );
+
+                change_notes.push(change_note);
+            }
+        }
+
+        for change_note in change_notes {
+            self.add_output(change_note)?;
+        }
+
+        // Generate randomized public key
+
+        // The public key after randomization has been applied. This is used
+        // during signature verification. Referred to as `rk` in the literature
+        // Calculated from the authorizing key and the public_key_randomness.
+        let randomized_public_key =
+            redjubjub::PublicKey(self.spender_key.view_key.authorizing_key.into())
+                .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
+        
+        let mut spend_circuits = Vec::with_capacity(self.spends.len());
+        for spend in &self.spends {
+            spend_circuits.push(spend.build_circuit(
+                &self.spender_key,
+                &self.public_key_randomness,
+            )?);
+        }
+
+        let mut output_circuits = Vec::with_capacity(self.outputs.len());
+        for output in &self.outputs {
+            output_circuits.push(output.build_circuit(
+                &self.spender_key,
+                &self.public_key_randomness,
+            )?);
+        }
+
+        let mut mint_circuits = Vec::with_capacity(self.mints.len());
+        for mint in &self.mints {
+            mint_circuits.push(mint.build_circuit(
+                &self.spender_key,
+                &self.public_key_randomness,
+            )?);
+        }
+        Ok((spend_circuits, output_circuits, mint_circuits))
     }
 
     // Post transaction without much validation.

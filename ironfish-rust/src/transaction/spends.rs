@@ -83,6 +83,25 @@ impl SpendBuilder {
         ExtendedPoint::from(self.value_commitment.commitment())
     }
 
+    pub(crate) fn build_circuit(
+        &self,
+        spender_key: &SaplingKey,
+        public_key_randomness: &jubjub::Fr,
+    ) -> Result<Spend, IronfishError> {
+        let circuit = Spend {
+            value_commitment: Some(self.value_commitment.clone()),
+            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            payment_address: Some(self.note.owner.transmission_key),
+            auth_path: self.auth_path.clone(),
+            commitment_randomness: Some(self.note.randomness),
+            anchor: Some(self.root_hash),
+            ar: Some(*public_key_randomness),
+            sender_address: Some(self.note.sender.transmission_key),
+        };
+
+        Ok(circuit)
+    }
+
     /// Sign this spend with the private key, and return a [`SpendDescription`]
     /// suitable for serialization.
     ///

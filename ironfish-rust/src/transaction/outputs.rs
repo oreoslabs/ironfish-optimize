@@ -67,6 +67,25 @@ impl OutputBuilder {
         ExtendedPoint::from(self.value_commitment.commitment())
     }
 
+    pub(crate) fn build_circuit(
+        &self,
+        spender_key: &SaplingKey,
+        public_key_randomness: &jubjub::Fr,
+    ) -> Result<Output, IronfishError> {
+        let diffie_hellman_keys = EphemeralKeyPair::new();
+
+        let circuit = Output {
+            value_commitment: Some(self.value_commitment.clone()),
+            payment_address: Some(self.note.owner.transmission_key),
+            commitment_randomness: Some(self.note.randomness),
+            esk: Some(*diffie_hellman_keys.secret()),
+            asset_id: *self.note.asset_id().as_bytes(),
+            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            ar: Some(*public_key_randomness),
+        };
+        Ok(circuit)
+    }
+
     /// Construct and return the committed [`OutputDescription`] for this receiving calculation.
     ///
     /// The [`OutputDescription`] is the publicly visible form of the new note, not

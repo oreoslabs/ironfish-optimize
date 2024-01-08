@@ -12,7 +12,7 @@ use crate::{
     witness::WitnessTrait,
 };
 
-use bellperson::gadgets::multipack;
+use bellperson::{gadgets::multipack, groth16::Proof};
 use bellperson::groth16;
 use blstrs::{Bls12, Scalar};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -100,6 +100,46 @@ impl SpendBuilder {
         };
 
         Ok(circuit)
+    }
+
+    pub(crate) fn build_description(
+        &self,
+        spender_key: &SaplingKey,
+        public_key_randomness: &jubjub::Fr,
+        randomized_public_key: &redjubjub::PublicKey,
+        proof: Proof<Bls12>,
+    ) -> Result<UnsignedSpendDescription, IronfishError> {
+        let value_commitment_point = self.value_commitment_point();
+        // Bytes to be placed into the nullifier set to verify whether this note
+        // has been previously spent.
+        let nullifier = self
+            .note
+            .nullifier(&spender_key.view_key, self.witness_position);
+
+        let blank_signature = {
+            let buf = [0u8; 64];
+            Signature::read(&mut buf.as_ref())?
+        };
+
+        let description = SpendDescription {
+            proof,
+            value_commitment: value_commitment_point,
+            root_hash: self.root_hash,
+            tree_size: self.tree_size,
+            nullifier,
+            authorizing_signature: blank_signature,
+        };
+        description.partial_verify()?;
+
+        verify_spend_proof(
+            &description.proof,
+            &description.public_inputs(randomized_public_key),
+        )?;
+
+        Ok(UnsignedSpendDescription {
+            public_key_randomness: *public_key_randomness,
+            description,
+        })
     }
 
     /// Sign this spend with the private key, and return a [`SpendDescription`]

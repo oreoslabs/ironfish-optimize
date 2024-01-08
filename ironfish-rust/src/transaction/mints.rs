@@ -4,7 +4,7 @@
 
 use std::io;
 
-use bellperson::groth16;
+use bellperson::groth16::{self, Proof};
 use blstrs::{Bls12, Scalar};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::Field;
@@ -65,6 +65,37 @@ impl MintBuilder {
             public_key_randomness: Some(*public_key_randomness),
         };
         Ok(circuit)
+    }
+
+    pub fn build_description(
+        &self,
+        spender_key: &SaplingKey,
+        public_key_randomness: &jubjub::Fr,
+        randomized_public_key: &redjubjub::PublicKey,
+        proof: Proof<Bls12>,
+    ) -> Result<UnsignedMintDescription, IronfishError> {
+        let blank_signature = {
+            let buf = [0u8; 64];
+            Signature::read(&mut buf.as_ref())?
+        };
+        let mint_description = MintDescription {
+            proof,
+            asset: self.asset,
+            value: self.value,
+            owner: spender_key.public_address(),
+            transfer_ownership_to: self.transfer_ownership_to,
+            authorizing_signature: blank_signature,
+        };
+        mint_description.partial_verify()?;
+        verify_mint_proof(
+            &mint_description.proof,
+            &mint_description.public_inputs(randomized_public_key),
+        )?;
+
+        Ok(UnsignedMintDescription {
+            public_key_randomness: *public_key_randomness,
+            description: mint_description,
+        })
     }
 
     pub fn build(

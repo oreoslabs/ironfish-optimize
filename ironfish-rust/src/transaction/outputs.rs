@@ -10,7 +10,7 @@ use crate::{
     sapling_bls12::SAPLING,
 };
 
-use bellperson::groth16;
+use bellperson::groth16::{self, Proof};
 use blstrs::{Bls12, Scalar};
 use ff::Field;
 use group::Curve;
@@ -84,6 +84,35 @@ impl OutputBuilder {
             ar: Some(*public_key_randomness),
         };
         Ok(circuit)
+    }
+
+    pub(crate) fn build_description(
+        &self,
+        spender_key: &SaplingKey,
+        randomized_public_key: &redjubjub::PublicKey,
+        proof: Proof<Bls12>,
+        diffie_hellman_keys: EphemeralKeyPair,
+    ) -> Result<OutputDescription, IronfishError> {
+        let merkle_note = if self.is_miners_fee {
+            MerkleNote::new_for_miners_fee(&self.note, &self.value_commitment, &diffie_hellman_keys)
+        } else {
+            MerkleNote::new(
+                spender_key,
+                &self.note,
+                &self.value_commitment,
+                &diffie_hellman_keys,
+            )
+        };
+
+        let description = OutputDescription { proof, merkle_note };
+        description.partial_verify()?;
+
+        verify_output_proof(
+            &description.proof,
+            &description.public_inputs(randomized_public_key),
+        )?;
+
+        Ok(description)
     }
 
     /// Construct and return the committed [`OutputDescription`] for this receiving calculation.

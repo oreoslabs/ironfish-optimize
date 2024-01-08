@@ -14,14 +14,14 @@ use crate::{
         asset_identifier::{AssetIdentifier, NATIVE_ASSET},
     },
     errors::{IronfishError, IronfishErrorKind},
-    keys::{PublicAddress, SaplingKey},
+    keys::{PublicAddress, SaplingKey, EphemeralKeyPair},
     note::Note,
     sapling_bls12::SAPLING,
     witness::WitnessTrait,
     OutputDescription, SpendDescription,
 };
 
-use bellperson::groth16::{verify_proofs_batch, PreparedVerifyingKey};
+use bellperson::groth16::{verify_proofs_batch, PreparedVerifyingKey, Proof};
 use blake2b_simd::Params as Blake2b;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use group::GroupEncoding;
@@ -315,15 +315,6 @@ impl ProposedTransaction {
         for change_note in change_notes {
             self.add_output(change_note)?;
         }
-
-        // Generate randomized public key
-
-        // The public key after randomization has been applied. This is used
-        // during signature verification. Referred to as `rk` in the literature
-        // Calculated from the authorizing key and the public_key_randomness.
-        let randomized_public_key =
-            redjubjub::PublicKey(self.spender_key.view_key.authorizing_key.into())
-                .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
         
         let mut spend_circuits = Vec::with_capacity(self.spends.len());
         for spend in &self.spends {
@@ -349,6 +340,95 @@ impl ProposedTransaction {
             )?);
         }
         Ok((spend_circuits, output_circuits, mint_circuits))
+    }
+
+    pub fn post_wasm(
+        &self,
+        spend_proofs: Vec<Proof<Bls12>>,
+        output_proofs: Vec<Proof<Bls12>>,
+        otuput_diffie_hellman_keys: Vec<EphemeralKeyPair>,
+        mint_proofs: Vec<Proof<Bls12>>,
+    ) -> Result<Transaction, IronfishError> {
+        let randomized_public_key =
+            redjubjub::PublicKey(self.spender_key.view_key.authorizing_key.into())
+                .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
+        
+        let mut unsigned_spends = Vec::with_capacity(self.spends.len());
+        for (spend, proof) in self.spends.iter().zip(spend_proofs) {
+            unsigned_spends.push(spend.build_description(
+                &self.spender_key,
+                &self.public_key_randomness,
+                &randomized_public_key,
+                proof
+            )?);
+        }
+
+        let mut output_descriptions = Vec::with_capacity(self.outputs.len());
+        for ((output, proof), diffie_hellman_keys) in self.outputs.iter().zip(output_proofs).zip(otuput_diffie_hellman_keys) {
+            output_descriptions.push(output.build_description(
+                &self.spender_key,
+                &randomized_public_key,
+                proof,
+                diffie_hellman_keys,
+            )?);
+        }
+
+        let mut unsigned_mints = Vec::with_capacity(self.mints.len());
+        for (mint, proof) in self.mints.iter().zip(mint_proofs) {
+            unsigned_mints.push(mint.build_description(
+                &self.spender_key,
+                &self.public_key_randomness,
+                &randomized_public_key,
+                proof,
+            )?);
+        }
+
+        let mut burn_descriptions = Vec::with_capacity(self.burns.len());
+        for burn in &self.burns {
+            burn_descriptions.push(burn.build());
+        }
+
+        // Create the transaction signature hash
+        let data_to_sign = self.transaction_signature_hash(
+            &unsigned_spends,
+            &output_descriptions,
+            &unsigned_mints,
+            &burn_descriptions,
+        )?;
+
+        // Create and verify binding signature keys
+        let (binding_signature_private_key, binding_signature_public_key) =
+            self.binding_signature_keys(&unsigned_mints, &burn_descriptions)?;
+
+        let binding_signature = self.binding_signature(
+            &binding_signature_private_key,
+            &binding_signature_public_key,
+            &data_to_sign,
+        )?;
+
+        // Sign spends now that we have the data needed to be signed
+        let mut spend_descriptions = Vec::with_capacity(unsigned_spends.len());
+        for spend in unsigned_spends.drain(0..) {
+            spend_descriptions.push(spend.sign(&self.spender_key, &data_to_sign)?);
+        }
+
+        // Sign mints now that we have the data needed to be signed
+        let mut mint_descriptions = Vec::with_capacity(unsigned_mints.len());
+        for mint in unsigned_mints.drain(0..) {
+            mint_descriptions.push(mint.sign(&self.spender_key, &data_to_sign)?);
+        }
+
+        Ok(Transaction {
+            version: self.version,
+            expiration: self.expiration,
+            fee: *self.value_balances.fee(),
+            spends: spend_descriptions,
+            outputs: output_descriptions,
+            mints: mint_descriptions,
+            burns: burn_descriptions,
+            binding_signature,
+            randomized_public_key,
+        })
     }
 
     // Post transaction without much validation.

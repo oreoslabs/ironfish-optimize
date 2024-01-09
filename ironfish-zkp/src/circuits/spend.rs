@@ -1,6 +1,11 @@
+use std::borrow::Borrow;
+use std::io::{Write, Read};
+
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use byteorder::{WriteBytesExt, ReadBytesExt};
 use ff::{Field, PrimeField};
-use jubjub::SubgroupPoint;
+use group::GroupEncoding;
+use jubjub::{SubgroupPoint, ExtendedPoint};
 
 use crate::constants::{CRH_IVK_PERSONALIZATION, PRF_NF_PERSONALIZATION};
 use crate::{constants::proof::PUBLIC_KEY_GENERATOR, primitives::ValueCommitment};
@@ -48,6 +53,78 @@ pub struct Spend {
 
     /// The sender address associated with the note
     pub sender_address: Option<SubgroupPoint>,
+}
+
+impl Spend {
+    pub fn write<W: Write>(&self, mut writer: W) -> std::io::Result<()> {
+        if let Some(value_commitment) = self.value_commitment.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(value_commitment.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(proof_generation_key) = self.proof_generation_key.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(proof_generation_key.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(payment_address) = self.payment_address.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(payment_address.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(commitment_randomness) = self.commitment_randomness.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(commitment_randomness.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(ar) = self.ar.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(ar.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        writer.write_all(self.auth_path.len().to_le_bytes().as_ref())?;
+        let bytes = self.auth_path.iter().flat_map(|auth_path| {
+            let mut res = vec![];
+            match auth_path {
+                Some((val, flag)) => {
+                    res.push(1);
+                    res.extend(val.to_bytes_le());
+                    res.push(*flag as u8);
+                },
+                None => {
+                    res.push(0);
+                },
+            }
+            res
+        }).collect::<Vec<u8>>();
+        writer.write_all(bytes.as_ref())?;
+        if let Some(anchor) = self.anchor.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(anchor.to_bytes_le().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(sender_address) = self.sender_address.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(sender_address.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        Ok(())
+    }
+
+    pub fn read<R: Read>(mut reader: R) -> std::io::Result<Spend> {
+        // let mut value_commitment = None;
+        // if reader.read_u8().unwrap() == 1 {
+        //     value_commitment = reader.read
+        // }
+        todo!()
+    }
 }
 
 impl Circuit<blstrs::Scalar> for Spend {

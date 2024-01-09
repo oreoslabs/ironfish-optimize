@@ -1,5 +1,5 @@
 use ff::Field;
-use group::cofactor::CofactorGroup;
+use group::{cofactor::CofactorGroup, GroupEncoding};
 use rand::thread_rng;
 
 use crate::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
@@ -25,6 +25,14 @@ impl ValueCommitment {
     pub fn commitment(&self) -> jubjub::SubgroupPoint {
         (self.asset_generator.clear_cofactor() * jubjub::Fr::from(self.value))
             + (*VALUE_COMMITMENT_RANDOMNESS_GENERATOR * self.randomness)
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut res = vec![];
+        res.extend(self.value.to_le_bytes());
+        res.extend(self.randomness.to_bytes());
+        res.extend(self.asset_generator.to_bytes());
+        res
     }
 }
 

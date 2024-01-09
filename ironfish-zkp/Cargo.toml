@@ -27,10 +27,13 @@ blstrs = { version = "0.6.0", features = ["portable"] }
 byteorder = "1.4.3"
 ff = "0.12.0"
 group = "0.12.0"
-jubjub = { git = "https://github.com/iron-fish/jubjub.git", branch = "blstrs" }
+# jubjub = { git = "https://github.com/iron-fish/jubjub.git", branch = "blstrs" }
+jubjub = { path = "../../jubjub" }
 lazy_static = "1.4.0"
 rand = "0.8.5"
 getrandom = { version = "0.2", features = ["js"] }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
-zcash_primitives = { git = "https://github.com/iron-fish/librustzcash.git", branch = "blstrs", package = "zcash_primitives" }
-zcash_proofs = { git = "https://github.com/iron-fish/librustzcash.git", branch = "blstrs", package = "zcash_proofs" }
+# zcash_primitives = { git = "https://github.com/iron-fish/librustzcash.git", branch = "blstrs", package = "zcash_primitives" }
+zcash_primitives = { path = "../../librustzcash/zcash_primitives", package = "zcash_primitives" }
+# zcash_proofs = { git = "https://github.com/iron-fish/librustzcash.git", branch = "blstrs", package = "zcash_proofs" }
+zcash_proofs = { path = "../../librustzcash/zcash_proofs", package = "zcash_proofs" }

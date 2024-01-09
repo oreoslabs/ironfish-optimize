@@ -43,7 +43,8 @@ crypto_box = { version = "0.8", features = ["std"] }
 ff = "0.12.0"
 group = "0.12.0"
 ironfish_zkp = { version = "0.2.0", path = "../ironfish-zkp" }
-jubjub = { git = "https://github.com/iron-fish/jubjub.git", branch = "blstrs" }
+# jubjub = { git = "https://github.com/iron-fish/jubjub.git", branch = "blstrs" }
+jubjub = { path = "../../jubjub" }
 lazy_static = "1.4.0"
 libc = "0.2.126" # sub-dependency that needs a pinned version until a new release of cpufeatures: https://github.com/RustCrypto/utils/pull/789
 rand = "0.8.5"

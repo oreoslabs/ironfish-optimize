@@ -119,10 +119,14 @@ impl Spend {
     }
 
     pub fn read<R: Read>(mut reader: R) -> std::io::Result<Spend> {
-        // let mut value_commitment = None;
-        // if reader.read_u8().unwrap() == 1 {
-        //     value_commitment = reader.read
-        // }
+        let mut value_commitment = None;
+        if reader.read_u8()? == 1 {
+            value_commitment = Some(ValueCommitment::read(&mut reader)?);
+        }
+        // let mut proof_generation_key = None;
+        if reader.read_u8()? == 1 {
+            // proof_generation_key = ProofGenerationKey
+        }
         todo!()
     }
 }

@@ -1,11 +1,12 @@
 use std::borrow::Borrow;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
+use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use byteorder::{WriteBytesExt, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::{Field, PrimeField};
-use group::GroupEncoding;
-use jubjub::{SubgroupPoint, ExtendedPoint};
+use jubjub::SubgroupPoint;
+use serde::de::Visitor;
 
 use crate::constants::{CRH_IVK_PERSONALIZATION, PRF_NF_PERSONALIZATION};
 use crate::{constants::proof::PUBLIC_KEY_GENERATOR, primitives::ValueCommitment};
@@ -16,6 +17,7 @@ use bellperson::gadgets::boolean;
 use bellperson::gadgets::multipack;
 use bellperson::gadgets::num;
 use bellperson::gadgets::Assignment;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zcash_primitives::sapling::ProofGenerationKey;
 use zcash_proofs::{
     circuit::{ecc, pedersen_hash},
@@ -65,13 +67,13 @@ impl Spend {
         }
         if let Some(proof_generation_key) = self.proof_generation_key.borrow() {
             writer.write_u8(1)?;
-            writer.write_all(proof_generation_key.to_bytes().as_ref())?;
+            writer.write_all(proof_generation_key.to_bytes_le().as_ref())?;
         } else {
             writer.write_u8(0)?;
         }
         if let Some(payment_address) = self.payment_address.borrow() {
             writer.write_u8(1)?;
-            writer.write_all(payment_address.to_bytes().as_ref())?;
+            writer.write_all(payment_address.0.to_bytes_le().as_ref())?;
         } else {
             writer.write_u8(0)?;
         }
@@ -87,21 +89,26 @@ impl Spend {
         } else {
             writer.write_u8(0)?;
         }
-        writer.write_all(self.auth_path.len().to_le_bytes().as_ref())?;
-        let bytes = self.auth_path.iter().flat_map(|auth_path| {
-            let mut res = vec![];
-            match auth_path {
-                Some((val, flag)) => {
-                    res.push(1);
-                    res.extend(val.to_bytes_le());
-                    res.push(*flag as u8);
-                },
-                None => {
-                    res.push(0);
-                },
-            }
-            res
-        }).collect::<Vec<u8>>();
+        writer.write_all((self.auth_path.len() as u32).to_le_bytes().as_ref())?;
+        let bytes = self
+            .auth_path
+            .iter()
+            .flat_map(|auth_path| {
+                let mut res = vec![];
+                match auth_path {
+                    Some((val, flag)) => {
+                        res.push(1);
+                        res.extend(val.to_bytes_le());
+                        let flag = if *flag { 0u8 } else { 1u8 };
+                        res.push(flag);
+                    }
+                    None => {
+                        res.push(0);
+                    }
+                }
+                res
+            })
+            .collect::<Vec<u8>>();
         writer.write_all(bytes.as_ref())?;
         if let Some(anchor) = self.anchor.borrow() {
             writer.write_u8(1)?;
@@ -111,7 +118,7 @@ impl Spend {
         }
         if let Some(sender_address) = self.sender_address.borrow() {
             writer.write_u8(1)?;
-            writer.write_all(sender_address.to_bytes().as_ref())?;
+            writer.write_all(sender_address.to_bytes_le().as_ref())?;
         } else {
             writer.write_u8(0)?;
         }
@@ -123,12 +130,96 @@ impl Spend {
         if reader.read_u8()? == 1 {
             value_commitment = Some(ValueCommitment::read(&mut reader)?);
         }
-        // let mut proof_generation_key = None;
+        let mut proof_generation_key = None;
         if reader.read_u8()? == 1 {
-            // proof_generation_key = ProofGenerationKey
+            proof_generation_key = Some(ProofGenerationKey::read(&mut reader)?);
         }
-        todo!()
+        let mut payment_address = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 160];
+            reader.read_exact(&mut bytes)?;
+            payment_address = Some(SubgroupPoint::from_bytes_le(&bytes));
+        }
+        let mut commitment_randomness = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            commitment_randomness = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
+        }
+        let mut ar = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            ar = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
+        }
+        let len = reader.read_u32::<LittleEndian>().unwrap();
+        let mut auth_path = vec![];
+        for _ in 0..len {
+            if reader.read_u8()? == 1 {
+                let mut bytes = [0u8; 32];
+                reader.read_exact(&mut bytes)?;
+                let val = blstrs::Scalar::from_bytes_le(&bytes).unwrap();
+                let flag = reader.read_u8()? == 0;
+                auth_path.push(Some((val, flag)));
+            } else {
+                auth_path.push(None);
+            }
+        }
+        let mut anchor = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            anchor = Some(blstrs::Scalar::from_bytes_le(&bytes).unwrap());
+        }
+        let mut sender_address = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 160];
+            reader.read_exact(&mut bytes)?;
+            sender_address = Some(SubgroupPoint::from_bytes_le(&bytes));
+        }
+        Ok(Spend {
+            value_commitment,
+            proof_generation_key,
+            payment_address,
+            commitment_randomness,
+            ar,
+            auth_path,
+            anchor,
+            sender_address,
+        })
     }
+}
+
+impl Serialize for Spend {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut v = Vec::new();
+        self.write(&mut v).unwrap();
+        s.serialize_bytes(&v)
+    }
+}
+
+impl<'de> Deserialize<'de> for Spend {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        deserialize_spend(d)
+    }
+}
+
+fn deserialize_spend<'de, D: Deserializer<'de>>(d: D) -> Result<Spend, D::Error> {
+    struct BytesVisitor;
+
+    impl<'de> Visitor<'de> for BytesVisitor {
+        type Value = Spend;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a proof")
+        }
+        #[inline]
+        fn visit_bytes<F: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, F> {
+            let p = Spend::read(v).unwrap();
+            Ok(p)
+        }
+    }
+    d.deserialize_bytes(BytesVisitor)
 }
 
 impl Circuit<blstrs::Scalar> for Spend {
@@ -544,6 +635,10 @@ mod test {
                     anchor: Some(cur),
                     sender_address: Some(payment_address),
                 };
+
+                let mut writer = vec![];
+                instance.write(&mut writer).unwrap();
+                let spend = Spend::read(&writer[..]).unwrap();
 
                 instance.synthesize(&mut cs).unwrap();
 

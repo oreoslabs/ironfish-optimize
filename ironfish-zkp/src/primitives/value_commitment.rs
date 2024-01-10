@@ -1,4 +1,4 @@
-use byteorder::{ReadBytesExt, LittleEndian};
+use byteorder::{LittleEndian, ReadBytesExt};
 use ff::Field;
 use group::{cofactor::CofactorGroup, GroupEncoding};
 use jubjub::ExtendedPoint;

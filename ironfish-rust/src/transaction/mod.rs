@@ -14,7 +14,7 @@ use crate::{
         asset_identifier::{AssetIdentifier, NATIVE_ASSET},
     },
     errors::{IronfishError, IronfishErrorKind},
-    keys::{PublicAddress, SaplingKey, EphemeralKeyPair},
+    keys::{EphemeralKeyPair, PublicAddress, SaplingKey},
     note::Note,
     sapling_bls12::SAPLING,
     witness::WitnessTrait,
@@ -33,7 +33,8 @@ use ironfish_zkp::{
         NATIVE_VALUE_COMMITMENT_GENERATOR, SPENDING_KEY_GENERATOR,
         VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
     },
-    redjubjub::{self, PrivateKey, PublicKey, Signature}, proofs::{Spend, Output, MintAsset},
+    proofs::{MintAsset, Output, Spend},
+    redjubjub::{self, PrivateKey, PublicKey, Signature},
 };
 
 use std::{
@@ -282,7 +283,7 @@ impl ProposedTransaction {
     pub fn build_circuits(
         &mut self,
         change_goes_to: Option<PublicAddress>,
-        intended_transaction_fee: u64
+        intended_transaction_fee: u64,
     ) -> Result<(Vec<Spend>, Vec<Output>, Vec<MintAsset>), IronfishError> {
         let mut change_notes = vec![];
 
@@ -315,29 +316,22 @@ impl ProposedTransaction {
         for change_note in change_notes {
             self.add_output(change_note)?;
         }
-        
+
         let mut spend_circuits = Vec::with_capacity(self.spends.len());
         for spend in &self.spends {
-            spend_circuits.push(spend.build_circuit(
-                &self.spender_key,
-                &self.public_key_randomness,
-            )?);
+            spend_circuits
+                .push(spend.build_circuit(&self.spender_key, &self.public_key_randomness)?);
         }
 
         let mut output_circuits = Vec::with_capacity(self.outputs.len());
         for output in &self.outputs {
-            output_circuits.push(output.build_circuit(
-                &self.spender_key,
-                &self.public_key_randomness,
-            )?);
+            output_circuits
+                .push(output.build_circuit(&self.spender_key, &self.public_key_randomness)?);
         }
 
         let mut mint_circuits = Vec::with_capacity(self.mints.len());
         for mint in &self.mints {
-            mint_circuits.push(mint.build_circuit(
-                &self.spender_key,
-                &self.public_key_randomness,
-            )?);
+            mint_circuits.push(mint.build_circuit(&self.spender_key, &self.public_key_randomness)?);
         }
         Ok((spend_circuits, output_circuits, mint_circuits))
     }
@@ -352,19 +346,24 @@ impl ProposedTransaction {
         let randomized_public_key =
             redjubjub::PublicKey(self.spender_key.view_key.authorizing_key.into())
                 .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
-        
+
         let mut unsigned_spends = Vec::with_capacity(self.spends.len());
         for (spend, proof) in self.spends.iter().zip(spend_proofs) {
             unsigned_spends.push(spend.build_description(
                 &self.spender_key,
                 &self.public_key_randomness,
                 &randomized_public_key,
-                proof
+                proof,
             )?);
         }
 
         let mut output_descriptions = Vec::with_capacity(self.outputs.len());
-        for ((output, proof), diffie_hellman_keys) in self.outputs.iter().zip(output_proofs).zip(otuput_diffie_hellman_keys) {
+        for ((output, proof), diffie_hellman_keys) in self
+            .outputs
+            .iter()
+            .zip(output_proofs)
+            .zip(otuput_diffie_hellman_keys)
+        {
             output_descriptions.push(output.build_description(
                 &self.spender_key,
                 &randomized_public_key,

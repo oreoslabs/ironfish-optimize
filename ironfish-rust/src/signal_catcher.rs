@@ -2,14 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
- #[cfg(target_family = "wasm")]
-use core::ffi::c_void;
 #[cfg(target_family = "wasm")]
 use core::ffi::c_int;
-#[cfg(not(target_family = "wasm"))]
-use libc::c_void;
+#[cfg(target_family = "wasm")]
+use core::ffi::c_void;
 #[cfg(not(target_family = "wasm"))]
 use libc::c_int;
+#[cfg(not(target_family = "wasm"))]
+use libc::c_void;
 
 extern "C" {
     // This is present in libc on unix, but not on linux

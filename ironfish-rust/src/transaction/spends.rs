@@ -12,8 +12,8 @@ use crate::{
     witness::WitnessTrait,
 };
 
-use bellperson::{gadgets::multipack, groth16::Proof};
 use bellperson::groth16;
+use bellperson::{gadgets::multipack, groth16::Proof};
 use blstrs::{Bls12, Scalar};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::{Field, PrimeField};

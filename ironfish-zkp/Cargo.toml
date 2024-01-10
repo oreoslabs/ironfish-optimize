@@ -37,3 +37,4 @@ rand_core = { version = "0.6.4", features = ["getrandom"] }
 zcash_primitives = { path = "../../librustzcash/zcash_primitives", package = "zcash_primitives" }
 # zcash_proofs = { git = "https://github.com/iron-fish/librustzcash.git", branch = "blstrs", package = "zcash_proofs" }
 zcash_proofs = { path = "../../librustzcash/zcash_proofs", package = "zcash_proofs" }
+serde = { version = "1.0", features = ["derive"] }

@@ -1,6 +1,9 @@
-use std::{borrow::Borrow, io::Write};
+use std::{
+    borrow::Borrow,
+    io::{Read, Write},
+};
 
-use byteorder::WriteBytesExt;
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use ff::PrimeField;
 
 use bellperson::{gadgets::blake2s, Circuit, ConstraintSystem, SynthesisError};
@@ -92,6 +95,52 @@ impl Output {
             writer.write_u8(0)?;
         }
         Ok(())
+    }
+
+    pub fn read<R: Read>(mut reader: R) -> std::io::Result<Output> {
+        let mut value_commitment = None;
+        if reader.read_u8()? == 1 {
+            value_commitment = Some(ValueCommitment::read(&mut reader)?);
+        }
+        let mut asset_id = [0u8; ASSET_ID_LENGTH];
+        reader.read_exact(&mut asset_id)?;
+        let mut payment_address = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 160];
+            reader.read_exact(&mut bytes)?;
+            payment_address = Some(SubgroupPoint::from_bytes_le(&bytes));
+        }
+        let mut commitment_randomness = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            commitment_randomness = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
+        }
+        let mut esk = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            esk = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
+        }
+        let mut proof_generation_key = None;
+        if reader.read_u8()? == 1 {
+            proof_generation_key = Some(ProofGenerationKey::read(&mut reader)?);
+        }
+        let mut ar = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            ar = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
+        }
+        Ok(Output {
+            value_commitment,
+            asset_id,
+            payment_address,
+            commitment_randomness,
+            esk,
+            proof_generation_key,
+            ar,
+        })
     }
 }
 
@@ -363,6 +412,10 @@ mod test {
                     proof_generation_key: Some(proof_generation_key.clone()),
                     ar: Some(ar),
                 };
+
+                let mut writer = vec![];
+                instance.write(&mut writer).unwrap();
+                let output = Output::read(&writer[..]).unwrap();
 
                 instance.synthesize(&mut cs).unwrap();
 

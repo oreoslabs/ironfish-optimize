@@ -20,6 +20,8 @@ use zcash_proofs::{
     },
 };
 
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::{
     circuits::util::assert_valid_asset_generator,
     constants::{proof::PUBLIC_KEY_GENERATOR, ASSET_ID_LENGTH, CRH_IVK_PERSONALIZATION},
@@ -142,6 +144,38 @@ impl Output {
             ar,
         })
     }
+}
+
+impl Serialize for Output {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut v = Vec::new();
+        self.write(&mut v).unwrap();
+        s.serialize_bytes(&v)
+    }
+}
+
+impl<'de> Deserialize<'de> for Output {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        deserialize_output(d)
+    }
+}
+
+fn deserialize_output<'de, D: Deserializer<'de>>(d: D) -> Result<Output, D::Error> {
+    struct BytesVisitor;
+
+    impl<'de> Visitor<'de> for BytesVisitor {
+        type Value = Output;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a proof")
+        }
+        #[inline]
+        fn visit_bytes<F: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, F> {
+            let p = Output::read(v).unwrap();
+            Ok(p)
+        }
+    }
+    d.deserialize_bytes(BytesVisitor)
 }
 
 impl Circuit<blstrs::Scalar> for Output {

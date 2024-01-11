@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 use std::io::{Read, Write};
-use std::marker::PhantomData;
 
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};

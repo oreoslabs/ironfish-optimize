@@ -1,3 +1,6 @@
+use std::{borrow::Borrow, io::Write};
+
+use byteorder::WriteBytesExt;
 use ff::PrimeField;
 
 use bellperson::{gadgets::blake2s, Circuit, ConstraintSystem, SynthesisError};
@@ -47,6 +50,49 @@ pub struct Output {
 
     /// Re-randomization of the public key
     pub ar: Option<jubjub::Fr>,
+}
+
+impl Output {
+    pub fn write<W: Write>(&self, mut writer: W) -> std::io::Result<()> {
+        if let Some(value_commitment) = self.value_commitment.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(value_commitment.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        writer.write_all(&self.asset_id)?;
+        if let Some(payment_address) = self.payment_address.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(payment_address.0.to_bytes_le().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(commitment_randomness) = self.commitment_randomness.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(commitment_randomness.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(esk) = self.esk.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(esk.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(proof_generation_key) = self.proof_generation_key.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(proof_generation_key.to_bytes_le().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(ar) = self.ar.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(ar.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        Ok(())
+    }
 }
 
 impl Circuit<blstrs::Scalar> for Output {

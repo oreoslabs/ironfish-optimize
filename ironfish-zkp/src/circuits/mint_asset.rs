@@ -1,7 +1,13 @@
+use std::{
+    borrow::Borrow,
+    io::{Read, Write},
+};
+
 use bellperson::{
     gadgets::{blake2s, boolean},
     Circuit,
 };
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use ff::PrimeField;
 use zcash_primitives::sapling::ProofGenerationKey;
 use zcash_proofs::{
@@ -10,6 +16,7 @@ use zcash_proofs::{
 };
 
 use crate::constants::{proof::PUBLIC_KEY_GENERATOR, CRH_IVK_PERSONALIZATION};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 pub struct MintAsset {
     /// Key required to construct proofs for a particular spending key
@@ -18,6 +25,73 @@ pub struct MintAsset {
     /// Used to add randomness to signature generation without leaking the
     /// key. Referred to as `ar` in the literature.
     pub public_key_randomness: Option<jubjub::Fr>,
+}
+
+impl MintAsset {
+    pub fn write<W: Write>(&self, mut writer: W) -> std::io::Result<()> {
+        if let Some(proof_generation_key) = self.proof_generation_key.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(proof_generation_key.to_bytes_le().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        if let Some(public_key_randomness) = self.public_key_randomness.borrow() {
+            writer.write_u8(1)?;
+            writer.write_all(public_key_randomness.to_bytes().as_ref())?;
+        } else {
+            writer.write_u8(0)?;
+        }
+        Ok(())
+    }
+
+    pub fn read<R: Read>(mut reader: R) -> std::io::Result<MintAsset> {
+        let mut proof_generation_key = None;
+        if reader.read_u8()? == 1 {
+            proof_generation_key = Some(ProofGenerationKey::read(&mut reader)?);
+        }
+        let mut public_key_randomness = None;
+        if reader.read_u8()? == 1 {
+            let mut bytes = [0u8; 32];
+            reader.read_exact(&mut bytes)?;
+            public_key_randomness = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
+        }
+        Ok(MintAsset {
+            proof_generation_key,
+            public_key_randomness,
+        })
+    }
+}
+
+impl Serialize for MintAsset {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut v = Vec::new();
+        self.write(&mut v).unwrap();
+        s.serialize_bytes(&v)
+    }
+}
+
+impl<'de> Deserialize<'de> for MintAsset {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        deserialize_output(d)
+    }
+}
+
+fn deserialize_output<'de, D: Deserializer<'de>>(d: D) -> Result<MintAsset, D::Error> {
+    struct BytesVisitor;
+
+    impl<'de> Visitor<'de> for BytesVisitor {
+        type Value = MintAsset;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "a proof")
+        }
+        #[inline]
+        fn visit_bytes<F: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, F> {
+            let p = MintAsset::read(v).unwrap();
+            Ok(p)
+        }
+    }
+    d.deserialize_bytes(BytesVisitor)
 }
 
 impl Circuit<blstrs::Scalar> for MintAsset {
@@ -159,6 +233,11 @@ mod test {
             proof_generation_key: Some(proof_generation_key),
             public_key_randomness: Some(public_key_randomness),
         };
+
+        let mut writer = vec![];
+        circuit.write(&mut writer).unwrap();
+        let mint_asset = MintAsset::read(&writer[..]).unwrap();
+
         circuit.synthesize(&mut cs).unwrap();
 
         assert!(cs.is_satisfied());

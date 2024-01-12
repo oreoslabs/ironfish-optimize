@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 use ff::Field;
 use ironfish_zkp::constants::PUBLIC_KEY_GENERATOR;
+use jubjub::SubgroupPoint;
 use rand::thread_rng;
 
 /// Diffie Hellman key exchange pair as used in note encryption.
@@ -31,6 +32,21 @@ impl EphemeralKeyPair {
 
     pub fn public(&self) -> &jubjub::SubgroupPoint {
         &self.public
+    }
+
+    pub fn to_bytes_le(&self) -> Vec<u8> {
+        let mut res = vec![];
+        res.extend(self.secret.to_bytes());
+        res.extend(self.public.to_bytes_le());
+        res
+    }
+
+    pub fn from_bytes_le(bytes: Vec<u8>) -> Self {
+        let secret_bytes: &[u8; 32] = bytes[0..32].try_into().unwrap();
+        let public_bytes: &[u8; 160] = bytes[32..192].try_into().unwrap();
+        let secret = jubjub::Fr::from_bytes(secret_bytes).unwrap();
+        let public = SubgroupPoint::from_bytes_le(public_bytes);
+        Self { secret, public }
     }
 }
 

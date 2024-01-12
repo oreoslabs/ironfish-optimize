@@ -71,7 +71,7 @@ impl OutputBuilder {
         &self,
         spender_key: &SaplingKey,
         public_key_randomness: &jubjub::Fr,
-    ) -> Result<Output, IronfishError> {
+    ) -> Result<(Output, EphemeralKeyPair), IronfishError> {
         let diffie_hellman_keys = EphemeralKeyPair::new();
 
         let circuit = Output {
@@ -83,7 +83,7 @@ impl OutputBuilder {
             proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
             ar: Some(*public_key_randomness),
         };
-        Ok(circuit)
+        Ok((circuit, diffie_hellman_keys))
     }
 
     pub(crate) fn build_description(

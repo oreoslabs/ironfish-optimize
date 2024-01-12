@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use blstrs::Bls12;
+pub use blstrs::Bls12;
 use ff::Field;
 use outputs::OutputBuilder;
 use spends::{SpendBuilder, UnsignedSpendDescription};
@@ -21,7 +21,8 @@ use crate::{
     OutputDescription, SpendDescription,
 };
 
-use bellperson::groth16::{verify_proofs_batch, PreparedVerifyingKey, Proof};
+pub use bellperson::groth16::Proof;
+use bellperson::groth16::{verify_proofs_batch, PreparedVerifyingKey};
 use blake2b_simd::Params as Blake2b;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use group::GroupEncoding;
@@ -284,7 +285,15 @@ impl ProposedTransaction {
         &mut self,
         change_goes_to: Option<PublicAddress>,
         intended_transaction_fee: u64,
-    ) -> Result<(Vec<Spend>, Vec<Output>, Vec<MintAsset>), IronfishError> {
+    ) -> Result<
+        (
+            Vec<Spend>,
+            Vec<Output>,
+            Vec<EphemeralKeyPair>,
+            Vec<MintAsset>,
+        ),
+        IronfishError,
+    > {
         let mut change_notes = vec![];
 
         for (asset_id, value) in self.value_balances.iter() {
@@ -324,16 +333,24 @@ impl ProposedTransaction {
         }
 
         let mut output_circuits = Vec::with_capacity(self.outputs.len());
+        let mut output_diffie_hellman_keys = Vec::with_capacity(self.outputs.len());
         for output in &self.outputs {
-            output_circuits
-                .push(output.build_circuit(&self.spender_key, &self.public_key_randomness)?);
+            let (output, esk) =
+                output.build_circuit(&self.spender_key, &self.public_key_randomness)?;
+            output_circuits.push(output);
+            output_diffie_hellman_keys.push(esk);
         }
 
         let mut mint_circuits = Vec::with_capacity(self.mints.len());
         for mint in &self.mints {
             mint_circuits.push(mint.build_circuit(&self.spender_key, &self.public_key_randomness)?);
         }
-        Ok((spend_circuits, output_circuits, mint_circuits))
+        Ok((
+            spend_circuits,
+            output_circuits,
+            output_diffie_hellman_keys,
+            mint_circuits,
+        ))
     }
 
     pub fn post_wasm(

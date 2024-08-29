@@ -474,7 +474,12 @@ mod test {
         thread_rng().fill(&mut sig_hash[..]);
 
         let unsigned_proof = spend
-            .build(&key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &key.view_key(),
+                &key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should be able to build proof");
 
         verify_spend_proof(
@@ -487,17 +492,32 @@ mod test {
 
         // Wrong spender key
         assert!(spend
-            .build(&sender_key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &sender_key.view_key(),
+                &sender_key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key
+            )
             .is_err());
 
         // Wrong public key randomness
         assert!(spend
-            .build(&key, &other_public_key_randomness, &randomized_public_key)
+            .build(
+                &key.view_key(),
+                &key.sapling_proof_generation_key(),
+                &other_public_key_randomness,
+                &randomized_public_key
+            )
             .is_err());
 
         // Wrong randomized public key
         assert!(spend
-            .build(&key, &public_key_randomness, &other_randomized_public_key)
+            .build(
+                &key.view_key(),
+                &key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &other_randomized_public_key
+            )
             .is_err());
 
         assert!(verify_spend_proof(
@@ -537,7 +557,12 @@ mod test {
         thread_rng().fill(&mut sig_hash[..]);
 
         let unsigned_proof = spend
-            .build(&key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &key.view_key(),
+                &key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should be able to build proof");
         let proof = unsigned_proof
             .sign(&key, &sig_hash)

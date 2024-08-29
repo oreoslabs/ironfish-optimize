@@ -18,7 +18,7 @@ use crate::{
     note::Note,
     sapling_bls12::SAPLING,
     witness::WitnessTrait,
-    OutputDescription, SpendDescription,
+    IncomingViewKey, OutgoingViewKey, OutputDescription, SpendDescription, ViewKey,
 };
 
 pub use bellperson::groth16::Proof;
@@ -36,6 +36,7 @@ use ironfish_zkp::{
     },
     proofs::{MintAsset, Output, Spend},
     redjubjub::{self, PrivateKey, PublicKey, Signature},
+    ProofGenerationKey,
 };
 
 use std::{
@@ -124,7 +125,7 @@ pub struct ProposedTransaction {
 }
 
 impl ProposedTransaction {
-    pub fn new(spender_key: SaplingKey, version: TransactionVersion) -> Self {
+    pub fn new(version: TransactionVersion) -> Self {
         Self {
             version,
             spends: vec![],
@@ -133,7 +134,7 @@ impl ProposedTransaction {
             burns: vec![],
             value_balances: ValueBalances::new(),
             expiration: 0,
-            spender_key,
+            spender_key: SaplingKey::generate_key(),
             public_key_randomness: jubjub::Fr::random(thread_rng()),
         }
     }
@@ -206,6 +207,8 @@ impl ProposedTransaction {
     /// aka: self.value_balance - intended_transaction_fee - change = 0
     pub fn post(
         &mut self,
+        view_key: &ViewKey,
+        proof_generation_key: &ProofGenerationKey,
         change_goes_to: Option<PublicAddress>,
         intended_transaction_fee: u64,
     ) -> Result<Transaction, IronfishError> {
@@ -241,7 +244,7 @@ impl ProposedTransaction {
             self.add_output(change_note)?;
         }
 
-        self._partial_post()
+        self._partial_post(view_key, proof_generation_key)
     }
 
     /// Special case for posting a miners fee transaction. Miner fee transactions
@@ -249,7 +252,11 @@ impl ProposedTransaction {
     /// or change and therefore have a negative transaction fee. In normal use,
     /// a miner would not accept such a transaction unless it was explicitly set
     /// as the miners fee.
-    pub fn post_miners_fee(&mut self) -> Result<Transaction, IronfishError> {
+    pub fn post_miners_fee(
+        &mut self,
+        view_key: &ViewKey,
+        proof_generation_key: &ProofGenerationKey,
+    ) -> Result<Transaction, IronfishError> {
         if !self.spends.is_empty()
             || self.outputs.len() != 1
             || !self.mints.is_empty()
@@ -259,16 +266,20 @@ impl ProposedTransaction {
                 IronfishErrorKind::InvalidMinersFeeTransaction,
             ));
         }
-        self.post_miners_fee_unchecked()
+        self.post_miners_fee_unchecked(view_key, proof_generation_key)
     }
 
     /// Do not call this directly -- see post_miners_fee.
-    pub fn post_miners_fee_unchecked(&mut self) -> Result<Transaction, IronfishError> {
+    pub fn post_miners_fee_unchecked(
+        &mut self,
+        view_key: &ViewKey,
+        proof_generation_key: &ProofGenerationKey,
+    ) -> Result<Transaction, IronfishError> {
         // Set note_encryption_keys to a constant value on the outputs
         for output in &mut self.outputs {
             output.set_is_miners_fee();
         }
-        self._partial_post()
+        self._partial_post(view_key, proof_generation_key)
     }
 
     /// Get the expiration sequence for this transaction
@@ -283,6 +294,8 @@ impl ProposedTransaction {
 
     pub fn build_circuits(
         &mut self,
+        incoming_view_key: &IncomingViewKey,
+        proof_generation_key: &ProofGenerationKey,
         change_goes_to: Option<PublicAddress>,
         intended_transaction_fee: u64,
     ) -> Result<
@@ -307,15 +320,15 @@ impl ProposedTransaction {
             if change_amount < 0 {
                 return Err(IronfishError::new(IronfishErrorKind::InvalidBalance));
             }
+            let sender_address = PublicAddress::from_view_key(incoming_view_key);
             if change_amount > 0 {
-                let change_address =
-                    change_goes_to.unwrap_or_else(|| self.spender_key.public_address());
+                let change_address = change_goes_to.unwrap_or_else(|| sender_address);
                 let change_note = Note::new(
                     change_address,
                     change_amount as u64, // we checked it was positive
                     "",
                     *asset_id,
-                    self.spender_key.public_address(),
+                    sender_address,
                 );
 
                 change_notes.push(change_note);
@@ -329,21 +342,22 @@ impl ProposedTransaction {
         let mut spend_circuits = Vec::with_capacity(self.spends.len());
         for spend in &self.spends {
             spend_circuits
-                .push(spend.build_circuit(&self.spender_key, &self.public_key_randomness)?);
+                .push(spend.build_circuit(proof_generation_key, &self.public_key_randomness)?);
         }
 
         let mut output_circuits = Vec::with_capacity(self.outputs.len());
         let mut output_diffie_hellman_keys = Vec::with_capacity(self.outputs.len());
         for output in &self.outputs {
             let (output, esk) =
-                output.build_circuit(&self.spender_key, &self.public_key_randomness)?;
+                output.build_circuit(proof_generation_key, &self.public_key_randomness)?;
             output_circuits.push(output);
             output_diffie_hellman_keys.push(esk);
         }
 
         let mut mint_circuits = Vec::with_capacity(self.mints.len());
         for mint in &self.mints {
-            mint_circuits.push(mint.build_circuit(&self.spender_key, &self.public_key_randomness)?);
+            mint_circuits
+                .push(mint.build_circuit(proof_generation_key, &self.public_key_randomness)?);
         }
         Ok((
             spend_circuits,
@@ -355,19 +369,20 @@ impl ProposedTransaction {
 
     pub fn post_wasm(
         &self,
+        spender_key: &SaplingKey,
         spend_proofs: Vec<Proof<Bls12>>,
         output_proofs: Vec<Proof<Bls12>>,
         otuput_diffie_hellman_keys: Vec<EphemeralKeyPair>,
         mint_proofs: Vec<Proof<Bls12>>,
     ) -> Result<Transaction, IronfishError> {
         let randomized_public_key =
-            redjubjub::PublicKey(self.spender_key.view_key.authorizing_key.into())
+            redjubjub::PublicKey(spender_key.view_key.authorizing_key.into())
                 .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
 
         let mut unsigned_spends = Vec::with_capacity(self.spends.len());
         for (spend, proof) in self.spends.iter().zip(spend_proofs) {
             unsigned_spends.push(spend.build_description(
-                &self.spender_key,
+                &spender_key.view_key,
                 &self.public_key_randomness,
                 &randomized_public_key,
                 proof,
@@ -382,7 +397,7 @@ impl ProposedTransaction {
             .zip(otuput_diffie_hellman_keys)
         {
             output_descriptions.push(output.build_description(
-                &self.spender_key,
+                spender_key,
                 &randomized_public_key,
                 proof,
                 diffie_hellman_keys,
@@ -425,7 +440,7 @@ impl ProposedTransaction {
         // Sign spends now that we have the data needed to be signed
         let mut spend_descriptions = Vec::with_capacity(unsigned_spends.len());
         for spend in unsigned_spends.drain(0..) {
-            spend_descriptions.push(spend.sign(&self.spender_key, &data_to_sign)?);
+            spend_descriptions.push(spend.sign(spender_key, &data_to_sign)?);
         }
 
         // Sign mints now that we have the data needed to be signed
@@ -448,7 +463,11 @@ impl ProposedTransaction {
     }
 
     // Post transaction without much validation.
-    fn _partial_post(&self) -> Result<Transaction, IronfishError> {
+    fn _partial_post(
+        &self,
+        view_key: &ViewKey,
+        proof_generation_key: &ProofGenerationKey,
+    ) -> Result<Transaction, IronfishError> {
         // Generate randomized public key
 
         // The public key after randomization has been applied. This is used
@@ -462,7 +481,8 @@ impl ProposedTransaction {
         let mut unsigned_spends = Vec::with_capacity(self.spends.len());
         for spend in &self.spends {
             unsigned_spends.push(spend.build(
-                &self.spender_key,
+                view_key,
+                proof_generation_key,
                 &self.public_key_randomness,
                 &randomized_public_key,
             )?);

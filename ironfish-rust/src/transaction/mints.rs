@@ -13,6 +13,7 @@ use ironfish_zkp::{
     constants::SPENDING_KEY_GENERATOR,
     proofs::MintAsset,
     redjubjub::{self, Signature},
+    ProofGenerationKey,
 };
 use jubjub::ExtendedPoint;
 use rand::thread_rng;
@@ -57,11 +58,11 @@ impl MintBuilder {
 
     pub fn build_circuit(
         &self,
-        spender_key: &SaplingKey,
+        proof_generation_key: &ProofGenerationKey,
         public_key_randomness: &jubjub::Fr,
     ) -> Result<MintAsset, IronfishError> {
         let circuit = MintAsset {
-            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            proof_generation_key: Some(proof_generation_key.clone()),
             public_key_randomness: Some(*public_key_randomness),
         };
         Ok(circuit)

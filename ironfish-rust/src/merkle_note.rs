@@ -73,7 +73,7 @@ impl PartialEq for MerkleNote {
 
 impl MerkleNote {
     pub fn new(
-        spender_key: &SaplingKey,
+        outgoing_view_key: &OutgoingViewKey,
         note: &Note,
         value_commitment: &ValueCommitment,
         diffie_hellman_keys: &EphemeralKeyPair,
@@ -86,7 +86,7 @@ impl MerkleNote {
         key_bytes[32..].clone_from_slice(secret_key.to_repr().as_ref());
 
         let encryption_key = calculate_key_for_encryption_keys(
-            spender_key.outgoing_view_key(),
+            outgoing_view_key,
             &value_commitment.commitment().into(),
             &note.commitment_point(),
             public_key,

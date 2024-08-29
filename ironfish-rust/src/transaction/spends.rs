@@ -10,6 +10,7 @@ use crate::{
     sapling_bls12::SAPLING,
     serializing::{read_point, read_scalar},
     witness::WitnessTrait,
+    ViewKey,
 };
 
 use bellperson::groth16;
@@ -23,7 +24,7 @@ use ironfish_zkp::{
     primitives::ValueCommitment,
     proofs::Spend,
     redjubjub::{self, Signature},
-    Nullifier,
+    Nullifier, ProofGenerationKey,
 };
 use jubjub::ExtendedPoint;
 use rand::thread_rng;
@@ -85,12 +86,12 @@ impl SpendBuilder {
 
     pub(crate) fn build_circuit(
         &self,
-        spender_key: &SaplingKey,
+        proof_generation_key: &ProofGenerationKey,
         public_key_randomness: &jubjub::Fr,
     ) -> Result<Spend, IronfishError> {
         let circuit = Spend {
             value_commitment: Some(self.value_commitment.clone()),
-            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            proof_generation_key: Some(proof_generation_key.clone()),
             payment_address: Some(self.note.owner.transmission_key),
             auth_path: self.auth_path.clone(),
             commitment_randomness: Some(self.note.randomness),
@@ -104,7 +105,7 @@ impl SpendBuilder {
 
     pub(crate) fn build_description(
         &self,
-        spender_key: &SaplingKey,
+        view_key: &ViewKey,
         public_key_randomness: &jubjub::Fr,
         randomized_public_key: &redjubjub::PublicKey,
         proof: Proof<Bls12>,
@@ -112,9 +113,7 @@ impl SpendBuilder {
         let value_commitment_point = self.value_commitment_point();
         // Bytes to be placed into the nullifier set to verify whether this note
         // has been previously spent.
-        let nullifier = self
-            .note
-            .nullifier(&spender_key.view_key, self.witness_position);
+        let nullifier = self.note.nullifier(view_key, self.witness_position);
 
         let blank_signature = {
             let buf = [0u8; 64];
@@ -149,7 +148,8 @@ impl SpendBuilder {
     /// transactions
     pub(crate) fn build(
         &self,
-        spender_key: &SaplingKey,
+        view_key: &ViewKey,
+        proof_generation_key: &ProofGenerationKey,
         public_key_randomness: &jubjub::Fr,
         randomized_public_key: &redjubjub::PublicKey,
     ) -> Result<UnsignedSpendDescription, IronfishError> {
@@ -157,7 +157,7 @@ impl SpendBuilder {
 
         let circuit = Spend {
             value_commitment: Some(self.value_commitment.clone()),
-            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            proof_generation_key: Some(proof_generation_key.clone()),
             payment_address: Some(self.note.owner.transmission_key),
             auth_path: self.auth_path.clone(),
             commitment_randomness: Some(self.note.randomness),
@@ -173,9 +173,7 @@ impl SpendBuilder {
 
         // Bytes to be placed into the nullifier set to verify whether this note
         // has been previously spent.
-        let nullifier = self
-            .note
-            .nullifier(&spender_key.view_key, self.witness_position);
+        let nullifier = self.note.nullifier(view_key, self.witness_position);
 
         let blank_signature = {
             let buf = [0u8; 64];

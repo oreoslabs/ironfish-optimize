@@ -14,7 +14,7 @@ use bellperson::groth16::{self, Proof};
 use blstrs::{Bls12, Scalar};
 use ff::Field;
 use group::Curve;
-use ironfish_zkp::{primitives::ValueCommitment, proofs::Output, redjubjub};
+use ironfish_zkp::{primitives::ValueCommitment, proofs::Output, redjubjub, ProofGenerationKey};
 use jubjub::ExtendedPoint;
 use rand::thread_rng;
 
@@ -69,7 +69,7 @@ impl OutputBuilder {
 
     pub(crate) fn build_circuit(
         &self,
-        spender_key: &SaplingKey,
+        proof_generation_key: &ProofGenerationKey,
         public_key_randomness: &jubjub::Fr,
     ) -> Result<(Output, EphemeralKeyPair), IronfishError> {
         let diffie_hellman_keys = EphemeralKeyPair::new();
@@ -80,7 +80,7 @@ impl OutputBuilder {
             commitment_randomness: Some(self.note.randomness),
             esk: Some(*diffie_hellman_keys.secret()),
             asset_id: *self.note.asset_id().as_bytes(),
-            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            proof_generation_key: Some(proof_generation_key.clone()),
             ar: Some(*public_key_randomness),
         };
         Ok((circuit, diffie_hellman_keys))
@@ -97,7 +97,7 @@ impl OutputBuilder {
             MerkleNote::new_for_miners_fee(&self.note, &self.value_commitment, &diffie_hellman_keys)
         } else {
             MerkleNote::new(
-                spender_key,
+                spender_key.outgoing_view_key(),
                 &self.note,
                 &self.value_commitment,
                 &diffie_hellman_keys,
@@ -146,7 +146,7 @@ impl OutputBuilder {
             MerkleNote::new_for_miners_fee(&self.note, &self.value_commitment, &diffie_hellman_keys)
         } else {
             MerkleNote::new(
-                spender_key,
+                spender_key.outgoing_view_key(),
                 &self.note,
                 &self.value_commitment,
                 &diffie_hellman_keys,

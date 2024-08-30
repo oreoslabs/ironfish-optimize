@@ -22,6 +22,7 @@ use crate::{
     assets::asset::Asset,
     errors::{IronfishError, IronfishErrorKind},
     sapling_bls12::SAPLING,
+    serializing::read_scalar,
     transaction::TransactionVersion,
     PublicAddress, SaplingKey,
 };
@@ -66,6 +67,37 @@ impl MintBuilder {
             public_key_randomness: Some(*public_key_randomness),
         };
         Ok(circuit)
+    }
+
+    pub fn build_description_with_address(
+        &self,
+        public_address: PublicAddress,
+        public_key_randomness: &jubjub::Fr,
+        randomized_public_key: &redjubjub::PublicKey,
+        proof: Proof<Bls12>,
+    ) -> Result<UnsignedMintDescription, IronfishError> {
+        let blank_signature = {
+            let buf = [0u8; 64];
+            Signature::read(&mut buf.as_ref())?
+        };
+        let mint_description = MintDescription {
+            proof,
+            asset: self.asset,
+            value: self.value,
+            owner: public_address,
+            transfer_ownership_to: self.transfer_ownership_to,
+            authorizing_signature: blank_signature,
+        };
+        mint_description.partial_verify()?;
+        verify_mint_proof(
+            &mint_description.proof,
+            &mint_description.public_inputs(randomized_public_key),
+        )?;
+
+        Ok(UnsignedMintDescription {
+            public_key_randomness: *public_key_randomness,
+            description: mint_description,
+        })
     }
 
     pub fn build_description(
@@ -142,6 +174,7 @@ impl MintBuilder {
 /// The publicly visible values of a mint description in a transaction.
 /// These fields get serialized when computing the transaction hash and are used
 /// to prove that the creator has knowledge of these values.
+#[derive(Clone)]
 pub struct UnsignedMintDescription {
     /// Used to add randomness to signature generation. Referred to as `ar` in
     /// the literature.
@@ -182,6 +215,35 @@ impl UnsignedMintDescription {
         );
 
         Ok(self.description)
+    }
+
+    pub fn add_signature(mut self, signature: Signature) -> MintDescription {
+        self.description.authorizing_signature = signature;
+        self.description
+    }
+
+    pub fn read<R: io::Read>(
+        mut reader: R,
+        version: TransactionVersion,
+    ) -> Result<Self, IronfishError> {
+        let public_key_randomness = read_scalar(&mut reader)?;
+        let description = MintDescription::read(&mut reader, version)?;
+
+        Ok(UnsignedMintDescription {
+            public_key_randomness,
+            description,
+        })
+    }
+
+    pub fn write<W: io::Write>(
+        &self,
+        mut writer: W,
+        version: TransactionVersion,
+    ) -> Result<(), IronfishError> {
+        writer.write_all(&self.public_key_randomness.to_bytes())?;
+        self.description.write(&mut writer, version)?;
+
+        Ok(())
     }
 }
 

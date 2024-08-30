@@ -407,7 +407,7 @@ impl ProposedTransaction {
         let mut unsigned_mints = Vec::with_capacity(self.mints.len());
         for (mint, proof) in self.mints.iter().zip(mint_proofs) {
             unsigned_mints.push(mint.build_description(
-                &self.spender_key,
+                spender_key,
                 &self.public_key_randomness,
                 &randomized_public_key,
                 proof,
@@ -446,7 +446,7 @@ impl ProposedTransaction {
         // Sign mints now that we have the data needed to be signed
         let mut mint_descriptions = Vec::with_capacity(unsigned_mints.len());
         for mint in unsigned_mints.drain(0..) {
-            mint_descriptions.push(mint.sign(&self.spender_key, &data_to_sign)?);
+            mint_descriptions.push(mint.sign(spender_key, &data_to_sign)?);
         }
 
         Ok(Transaction {

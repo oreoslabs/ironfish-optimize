@@ -365,7 +365,6 @@ impl ProposedTransaction {
         view_key: &ViewKey,
         incoming_view_key: &IncomingViewKey,
         outgoing_view_key: &OutgoingViewKey,
-        public_address: &PublicAddress,
         spend_proofs: Vec<Proof<Bls12>>,
         output_proofs: Vec<Proof<Bls12>>,
         otuput_diffie_hellman_keys: Vec<EphemeralKeyPair>,
@@ -402,7 +401,7 @@ impl ProposedTransaction {
         let mut unsigned_mints = Vec::with_capacity(self.mints.len());
         for (mint, proof) in self.mints.iter().zip(mint_proofs) {
             unsigned_mints.push(mint.build_description(
-                public_address,
+                &incoming_view_key.public_address(),
                 &self.public_key_randomness,
                 &randomized_public_key,
                 proof,

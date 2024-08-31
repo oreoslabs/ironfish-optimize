@@ -25,8 +25,6 @@ mod public_address;
 pub use public_address::*;
 mod view_keys;
 pub use view_keys::*;
-mod proof_generation_key;
-pub use proof_generation_key::*;
 
 #[cfg(test)]
 mod test;

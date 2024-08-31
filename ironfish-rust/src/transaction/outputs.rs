@@ -8,6 +8,7 @@ use crate::{
     merkle_note::MerkleNote,
     note::Note,
     sapling_bls12::SAPLING,
+    OutgoingViewKey,
 };
 
 use bellperson::groth16::{self, Proof};
@@ -88,7 +89,7 @@ impl OutputBuilder {
 
     pub(crate) fn build_description(
         &self,
-        spender_key: &SaplingKey,
+        outgoing_view_key: &OutgoingViewKey,
         randomized_public_key: &redjubjub::PublicKey,
         proof: Proof<Bls12>,
         diffie_hellman_keys: EphemeralKeyPair,
@@ -97,7 +98,7 @@ impl OutputBuilder {
             MerkleNote::new_for_miners_fee(&self.note, &self.value_commitment, &diffie_hellman_keys)
         } else {
             MerkleNote::new(
-                spender_key.outgoing_view_key(),
+                outgoing_view_key,
                 &self.note,
                 &self.value_commitment,
                 &diffie_hellman_keys,

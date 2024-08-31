@@ -22,10 +22,13 @@ pub struct IronfishError {
 /// in the code to reduce the cognitive load needed for using Result and Error
 /// types. The second is to give a singular type to convert into NAPI errors to
 /// be raised on the Javascript side.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum IronfishErrorKind {
     BellpersonSynthesis,
     CryptoBox,
+    FrostLibError,
+    FailedSignatureAggregation,
+    FailedSignatureVerification,
     IllegalValue,
     InconsistentWitness,
     InvalidAssetIdentifier,
@@ -36,6 +39,7 @@ pub enum IronfishErrorKind {
     InvalidDecryptionKey,
     InvalidDiversificationPoint,
     InvalidEntropy,
+    InvalidFr,
     InvalidLanguageEncoding,
     InvalidMinersFeeTransaction,
     InvalidMintProof,
@@ -46,6 +50,8 @@ pub enum IronfishErrorKind {
     InvalidOutputProof,
     InvalidPaymentAddress,
     InvalidPublicAddress,
+    InvalidSecret,
+    InvalidRandomizer,
     InvalidSignature,
     InvalidSigningKey,
     InvalidSpendProof,
@@ -57,6 +63,7 @@ pub enum IronfishErrorKind {
     Io,
     IsSmallOrder,
     RandomnessError,
+    RoundTwoSigningFailure,
     TryFromInt,
     Utf8,
 }

@@ -6,6 +6,7 @@ pub use blstrs::Bls12;
 use ff::Field;
 use outputs::OutputBuilder;
 use spends::{SpendBuilder, UnsignedSpendDescription};
+use unsigned::UnsignedTransaction;
 use value_balances::ValueBalances;
 
 use crate::{
@@ -54,6 +55,7 @@ pub mod burns;
 pub mod mints;
 pub mod outputs;
 pub mod spends;
+pub mod unsigned;
 
 mod utils;
 mod value_balances;
@@ -367,6 +369,90 @@ impl ProposedTransaction {
         ))
     }
 
+    pub fn add_proof(
+        &self,
+        view_key: &ViewKey,
+        incoming_view_key: &IncomingViewKey,
+        outgoing_view_key: &OutgoingViewKey,
+        spend_proofs: Vec<Proof<Bls12>>,
+        output_proofs: Vec<Proof<Bls12>>,
+        otuput_diffie_hellman_keys: Vec<EphemeralKeyPair>,
+        mint_proofs: Vec<Proof<Bls12>>,
+    ) -> Result<UnsignedTransaction, IronfishError> {
+        let randomized_public_key = redjubjub::PublicKey(view_key.authorizing_key.into())
+            .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
+
+        let mut unsigned_spends = Vec::with_capacity(self.spends.len());
+        for (spend, proof) in self.spends.iter().zip(spend_proofs) {
+            unsigned_spends.push(spend.build_description(
+                view_key,
+                &self.public_key_randomness,
+                &randomized_public_key,
+                proof,
+            )?);
+        }
+
+        let mut output_descriptions = Vec::with_capacity(self.outputs.len());
+        for ((output, proof), diffie_hellman_keys) in self
+            .outputs
+            .iter()
+            .zip(output_proofs)
+            .zip(otuput_diffie_hellman_keys)
+        {
+            output_descriptions.push(output.build_description(
+                outgoing_view_key,
+                &randomized_public_key,
+                proof,
+                diffie_hellman_keys,
+            )?);
+        }
+
+        let sender_address = PublicAddress::from_view_key(incoming_view_key);
+        let mut unsigned_mints = Vec::with_capacity(self.mints.len());
+        for (mint, proof) in self.mints.iter().zip(mint_proofs) {
+            unsigned_mints.push(mint.build_description(
+                &sender_address,
+                &self.public_key_randomness,
+                &randomized_public_key,
+                proof,
+            )?);
+        }
+
+        let mut burn_descriptions = Vec::with_capacity(self.burns.len());
+        for burn in &self.burns {
+            burn_descriptions.push(burn.build());
+        }
+
+        let data_to_sign = self.transaction_signature_hash(
+            &unsigned_spends,
+            &output_descriptions,
+            &unsigned_mints,
+            &burn_descriptions,
+        )?;
+
+        let (binding_signature_private_key, binding_signature_public_key) =
+            self.binding_signature_keys(&unsigned_mints, &burn_descriptions)?;
+
+        let binding_signature = self.binding_signature(
+            &binding_signature_private_key,
+            &binding_signature_public_key,
+            &data_to_sign,
+        )?;
+
+        Ok(UnsignedTransaction {
+            version: self.version,
+            spends: unsigned_spends,
+            outputs: output_descriptions,
+            mints: unsigned_mints,
+            burns: burn_descriptions,
+            binding_signature,
+            expiration: self.expiration,
+            randomized_public_key,
+            public_key_randomness: self.public_key_randomness,
+            fee: *self.value_balances.fee(),
+        })
+    }
+
     pub fn post_wasm(
         &self,
         spender_key: &SaplingKey,
@@ -397,7 +483,7 @@ impl ProposedTransaction {
             .zip(otuput_diffie_hellman_keys)
         {
             output_descriptions.push(output.build_description(
-                spender_key,
+                &spender_key.outgoing_view_key(),
                 &randomized_public_key,
                 proof,
                 diffie_hellman_keys,
@@ -407,7 +493,7 @@ impl ProposedTransaction {
         let mut unsigned_mints = Vec::with_capacity(self.mints.len());
         for (mint, proof) in self.mints.iter().zip(mint_proofs) {
             unsigned_mints.push(mint.build_description(
-                &self.spender_key,
+                &spender_key.public_address(),
                 &self.public_key_randomness,
                 &randomized_public_key,
                 proof,
@@ -446,7 +532,7 @@ impl ProposedTransaction {
         // Sign mints now that we have the data needed to be signed
         let mut mint_descriptions = Vec::with_capacity(unsigned_mints.len());
         for mint in unsigned_mints.drain(0..) {
-            mint_descriptions.push(mint.sign(&self.spender_key, &data_to_sign)?);
+            mint_descriptions.push(mint.sign(spender_key, &data_to_sign)?);
         }
 
         Ok(Transaction {
@@ -473,9 +559,8 @@ impl ProposedTransaction {
         // The public key after randomization has been applied. This is used
         // during signature verification. Referred to as `rk` in the literature
         // Calculated from the authorizing key and the public_key_randomness.
-        let randomized_public_key =
-            redjubjub::PublicKey(self.spender_key.view_key.authorizing_key.into())
-                .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
+        let randomized_public_key = redjubjub::PublicKey(view_key.authorizing_key.into())
+            .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
 
         // Build descriptions
         let mut unsigned_spends = Vec::with_capacity(self.spends.len());

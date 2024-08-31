@@ -10,7 +10,7 @@ use ironfish::transaction::{
     batch_verify_transactions, TransactionVersion, TRANSACTION_EXPIRATION_SIZE,
     TRANSACTION_FEE_SIZE, TRANSACTION_PUBLIC_KEY_SIZE, TRANSACTION_SIGNATURE_SIZE,
 };
-use ironfish::{MerkleNoteHash, ProposedTransaction, PublicAddress, SaplingKey, Transaction};
+use ironfish::{MerkleNoteHash, ProposedTransaction, PublicAddress, SaplingKey, Transaction, ViewKey};
 use napi::{
     bindgen_prelude::{i64n, BigInt, Buffer, Env, Object, Result, Undefined},
     JsBuffer,
@@ -280,6 +280,8 @@ impl NativeTransaction {
     #[napi]
     pub fn post(
         &mut self,
+        view_key: &ViewKey,
+        proof_generation_key: &ProofGenerationKey,
         change_goes_to: Option<String>,
         intended_transaction_fee: BigInt,
     ) -> Result<Buffer> {
@@ -292,7 +294,7 @@ impl NativeTransaction {
 
         let posted_transaction = self
             .transaction
-            .post(change_key, intended_transaction_fee_u64)
+            .post(view_key, proof_generation_key, change_key, intended_transaction_fee_u64)
             .map_err(to_napi_err)?;
 
         let mut vec: Vec<u8> = vec![];

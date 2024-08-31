@@ -374,6 +374,7 @@ impl ProposedTransaction {
         view_key: &ViewKey,
         incoming_view_key: &IncomingViewKey,
         outgoing_view_key: &OutgoingViewKey,
+        public_address: &PublicAddress,
         spend_proofs: Vec<Proof<Bls12>>,
         output_proofs: Vec<Proof<Bls12>>,
         otuput_diffie_hellman_keys: Vec<EphemeralKeyPair>,
@@ -407,11 +408,10 @@ impl ProposedTransaction {
             )?);
         }
 
-        let sender_address = PublicAddress::from_view_key(incoming_view_key);
         let mut unsigned_mints = Vec::with_capacity(self.mints.len());
         for (mint, proof) in self.mints.iter().zip(mint_proofs) {
             unsigned_mints.push(mint.build_description(
-                &sender_address,
+                public_address,
                 &self.public_key_randomness,
                 &randomized_public_key,
                 proof,
@@ -423,6 +423,7 @@ impl ProposedTransaction {
             burn_descriptions.push(burn.build());
         }
 
+        // Create the transaction signature hash
         let data_to_sign = self.transaction_signature_hash(
             &unsigned_spends,
             &output_descriptions,
@@ -430,6 +431,7 @@ impl ProposedTransaction {
             &burn_descriptions,
         )?;
 
+        // Create and verify binding signature keys
         let (binding_signature_private_key, binding_signature_public_key) =
             self.binding_signature_keys(&unsigned_mints, &burn_descriptions)?;
 

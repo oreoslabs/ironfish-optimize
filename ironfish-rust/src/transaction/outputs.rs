@@ -87,6 +87,35 @@ impl OutputBuilder {
         Ok((circuit, diffie_hellman_keys))
     }
 
+    // pub(crate) fn build_description_with_outgoing_key(
+    //     &self,
+    //     outgoing_view_key: &OutgoingViewKey,
+    //     randomized_public_key: &redjubjub::PublicKey,
+    //     proof: Proof<Bls12>,
+    //     diffie_hellman_keys: EphemeralKeyPair,
+    // ) -> Result<OutputDescription, IronfishError> {
+    //     let merkle_note = if self.is_miners_fee {
+    //         MerkleNote::new_for_miners_fee(&self.note, &self.value_commitment, &diffie_hellman_keys)
+    //     } else {
+    //         MerkleNote::new(
+    //             outgoing_view_key,
+    //             &self.note,
+    //             &self.value_commitment,
+    //             &diffie_hellman_keys,
+    //         )
+    //     };
+
+    //     let description = OutputDescription { proof, merkle_note };
+    //     description.partial_verify()?;
+
+    //     verify_output_proof(
+    //         &description.proof,
+    //         &description.public_inputs(randomized_public_key),
+    //     )?;
+
+    //     Ok(description)
+    // }
+
     pub(crate) fn build_description(
         &self,
         outgoing_view_key: &OutgoingViewKey,

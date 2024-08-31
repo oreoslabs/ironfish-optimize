@@ -213,6 +213,10 @@ impl SaplingKey {
         }
     }
 
+    pub fn hex_nsk(&self) -> String {
+        bytes_to_hex(&self.proof_authorizing_key.to_bytes())
+    }
+
     /// Convert the spending key to another value using a pseudorandom hash
     /// function. Used during key construction to derive the following keys:
     ///  *  `spend_authorizing_key` (represents a sapling scalar Fs type)

@@ -4,7 +4,7 @@
 
 use crate::{
     errors::{IronfishError, IronfishErrorKind},
-    keys::{EphemeralKeyPair, SaplingKey},
+    keys::EphemeralKeyPair,
     merkle_note::MerkleNote,
     note::Note,
     sapling_bls12::SAPLING,

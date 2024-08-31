@@ -1,6 +1,6 @@
 use byteorder::{LittleEndian, ReadBytesExt};
 use ff::Field;
-use group::{cofactor::CofactorGroup, GroupEncoding};
+use group::cofactor::CofactorGroup;
 use jubjub::ExtendedPoint;
 use rand::thread_rng;
 

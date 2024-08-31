@@ -28,7 +28,7 @@ use ironfish_zkp::{
 };
 use jubjub::ExtendedPoint;
 use rand::thread_rng;
-use std::{clone, io};
+use std::io;
 
 use super::{utils::verify_spend_proof, TRANSACTION_PUBLIC_KEY_SIZE};
 

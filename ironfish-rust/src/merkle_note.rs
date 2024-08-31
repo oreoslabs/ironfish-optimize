@@ -7,7 +7,7 @@ use crate::{errors::IronfishError, keys::EphemeralKeyPair, serializing::read_poi
 /// Implement a merkle note to store all the values that need to go into a merkle tree.
 /// A tree containing these values can serve as a snapshot of the entire chain.
 use super::{
-    keys::{shared_secret, IncomingViewKey, OutgoingViewKey, PublicAddress, SaplingKey},
+    keys::{shared_secret, IncomingViewKey, OutgoingViewKey, PublicAddress},
     note::{Note, ENCRYPTED_NOTE_SIZE},
     serializing::{aead, read_scalar},
     witness::{WitnessNode, WitnessTrait},

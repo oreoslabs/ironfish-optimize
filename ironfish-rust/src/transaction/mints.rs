@@ -425,7 +425,12 @@ mod test {
 
         let mint = MintBuilder::new(asset, value);
         let unsigned_mint = mint
-            .build(&key.public_address(), &key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key)
+            .build(
+                &key.public_address(),
+                &key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should build valid mint description");
 
         // Signature comes from the transaction, normally
@@ -588,7 +593,12 @@ mod test {
             .randomize(public_key_randomness, *SPENDING_KEY_GENERATOR);
 
         let unsigned_mint = mint
-            .build(&key.public_address(), &key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key)
+            .build(
+                &key.public_address(),
+                &key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should build valid mint description");
 
         // Signature comes from the transaction, normally
@@ -689,7 +699,12 @@ mod test {
             value,
         );
 
-        let unsigned_mint = mint.build(&key.public_address(), &key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key);
+        let unsigned_mint = mint.build(
+            &key.public_address(),
+            &key.sapling_proof_generation_key(),
+            &public_key_randomness,
+            &randomized_public_key,
+        );
         assert!(unsigned_mint.is_err());
     }
 }

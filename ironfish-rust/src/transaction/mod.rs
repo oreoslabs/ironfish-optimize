@@ -222,8 +222,7 @@ impl ProposedTransaction {
                 return Err(IronfishError::new(IronfishErrorKind::InvalidBalance));
             }
             if change_amount > 0 {
-                let change_address =
-                    change_goes_to.unwrap_or_else(|| spender_key.public_address());
+                let change_address = change_goes_to.unwrap_or_else(|| spender_key.public_address());
                 let change_note = Note::new(
                     change_address,
                     change_amount as u64, // we checked it was positive
@@ -545,17 +544,15 @@ impl ProposedTransaction {
     }
 
     // Post transaction without much validation.
-    fn _partial_post(
-        &self,
-        spender_key: &SaplingKey,
-    ) -> Result<Transaction, IronfishError> {
+    fn _partial_post(&self, spender_key: &SaplingKey) -> Result<Transaction, IronfishError> {
         // Generate randomized public key
 
         // The public key after randomization has been applied. This is used
         // during signature verification. Referred to as `rk` in the literature
         // Calculated from the authorizing key and the public_key_randomness.
-        let randomized_public_key = redjubjub::PublicKey(spender_key.view_key.authorizing_key.into())
-            .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
+        let randomized_public_key =
+            redjubjub::PublicKey(spender_key.view_key.authorizing_key.into())
+                .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
 
         // Build descriptions
         let mut unsigned_spends = Vec::with_capacity(self.spends.len());
@@ -660,9 +657,8 @@ impl ProposedTransaction {
         hasher.write_u32::<LittleEndian>(self.expiration)?;
         hasher.write_i64::<LittleEndian>(*self.value_balances.fee())?;
 
-        let randomized_public_key =
-            redjubjub::PublicKey(view_key.authorizing_key.into())
-                .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
+        let randomized_public_key = redjubjub::PublicKey(view_key.authorizing_key.into())
+            .randomize(self.public_key_randomness, *SPENDING_KEY_GENERATOR);
 
         hasher.write_all(&randomized_public_key.0.to_bytes())?;
 

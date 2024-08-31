@@ -331,7 +331,12 @@ mod test {
         output.set_is_miners_fee();
 
         let proof = output
-            .build(&spender_key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &spender_key.outgoing_view_key(),
+                &spender_key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should be able to build output proof");
 
         assert_eq!(
@@ -359,7 +364,12 @@ mod test {
 
         let output = OutputBuilder::new(note);
         let proof = output
-            .build(&spender_key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &spender_key.outgoing_view_key(),
+                &spender_key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should be able to build output proof");
 
         assert_ne!(
@@ -393,7 +403,12 @@ mod test {
 
         let output = OutputBuilder::new(note);
         let description = output
-            .build(&spender_key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &spender_key.outgoing_view_key(),
+                &spender_key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("should be able to build output proof");
 
         verify_output_proof(
@@ -405,7 +420,8 @@ mod test {
         // Wrong spender key
         assert!(output
             .build(
-                &receiver_key,
+                &receiver_key.outgoing_view_key(),
+                &receiver_key.sapling_proof_generation_key(),
                 &public_key_randomness,
                 &randomized_public_key
             )
@@ -414,7 +430,8 @@ mod test {
         // Wrong public key randomness
         assert!(output
             .build(
-                &spender_key,
+                &spender_key.outgoing_view_key(),
+                &spender_key.sapling_proof_generation_key(),
                 &other_public_key_randomness,
                 &randomized_public_key
             )
@@ -423,7 +440,8 @@ mod test {
         // Wrong randomized public key
         assert!(output
             .build(
-                &spender_key,
+                &spender_key.outgoing_view_key(),
+                &spender_key.sapling_proof_generation_key(),
                 &public_key_randomness,
                 &other_randomized_public_key
             )
@@ -455,7 +473,12 @@ mod test {
 
         let output = OutputBuilder::new(note);
         let proof = output
-            .build(&spender_key, &public_key_randomness, &randomized_public_key)
+            .build(
+                &spender_key.outgoing_view_key(),
+                &spender_key.sapling_proof_generation_key(),
+                &public_key_randomness,
+                &randomized_public_key,
+            )
             .expect("Should be able to build output proof");
         verify_output_proof(&proof.proof, &proof.public_inputs(&randomized_public_key))
             .expect("proof should check out");

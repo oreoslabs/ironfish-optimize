@@ -154,7 +154,8 @@ impl OutputBuilder {
     /// transactions.
     pub(crate) fn build(
         &self,
-        spender_key: &SaplingKey,
+        outgoing_view_key: &OutgoingViewKey,
+        proof_generation_key: &ProofGenerationKey,
         public_key_randomness: &jubjub::Fr,
         randomized_public_key: &redjubjub::PublicKey,
     ) -> Result<OutputDescription, IronfishError> {
@@ -166,7 +167,7 @@ impl OutputBuilder {
             commitment_randomness: Some(self.note.randomness),
             esk: Some(*diffie_hellman_keys.secret()),
             asset_id: *self.note.asset_id().as_bytes(),
-            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            proof_generation_key: Some(proof_generation_key.clone()),
             ar: Some(*public_key_randomness),
         };
 
@@ -176,7 +177,7 @@ impl OutputBuilder {
             MerkleNote::new_for_miners_fee(&self.note, &self.value_commitment, &diffie_hellman_keys)
         } else {
             MerkleNote::new(
-                spender_key.outgoing_view_key(),
+                outgoing_view_key,
                 &self.note,
                 &self.value_commitment,
                 &diffie_hellman_keys,

@@ -102,12 +102,13 @@ impl MintBuilder {
 
     pub fn build(
         &self,
-        spender_key: &SaplingKey,
+        public_address: &PublicAddress,
+        proof_generation_key: &ProofGenerationKey,
         public_key_randomness: &jubjub::Fr,
         randomized_public_key: &redjubjub::PublicKey,
     ) -> Result<UnsignedMintDescription, IronfishError> {
         let circuit = MintAsset {
-            proof_generation_key: Some(spender_key.sapling_proof_generation_key()),
+            proof_generation_key: Some(proof_generation_key.clone()),
             public_key_randomness: Some(*public_key_randomness),
         };
 
@@ -122,7 +123,7 @@ impl MintBuilder {
             proof,
             asset: self.asset,
             value: self.value,
-            owner: spender_key.public_address(),
+            owner: public_address.clone(),
             transfer_ownership_to: self.transfer_ownership_to,
             authorizing_signature: blank_signature,
         };
@@ -424,7 +425,7 @@ mod test {
 
         let mint = MintBuilder::new(asset, value);
         let unsigned_mint = mint
-            .build(&key, &public_key_randomness, &randomized_public_key)
+            .build(&key.public_address(), &key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key)
             .expect("should build valid mint description");
 
         // Signature comes from the transaction, normally
@@ -481,7 +482,7 @@ mod test {
         let mint = MintBuilder::new(asset, value);
 
         assert!(matches!(
-            mint.build(&owner_key, &public_key_randomness, &randomized_public_key),
+            mint.build(&owner_key.public_address(), &owner_key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key),
             Err(e) if matches!(e.kind, IronfishErrorKind::InvalidMintProof)
         ))
     }
@@ -587,7 +588,7 @@ mod test {
             .randomize(public_key_randomness, *SPENDING_KEY_GENERATOR);
 
         let unsigned_mint = mint
-            .build(key, &public_key_randomness, &randomized_public_key)
+            .build(&key.public_address(), &key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key)
             .expect("should build valid mint description");
 
         // Signature comes from the transaction, normally
@@ -688,7 +689,7 @@ mod test {
             value,
         );
 
-        let unsigned_mint = mint.build(&key, &public_key_randomness, &randomized_public_key);
+        let unsigned_mint = mint.build(&key.public_address(), &key.sapling_proof_generation_key(), &public_key_randomness, &randomized_public_key);
         assert!(unsigned_mint.is_err());
     }
 }

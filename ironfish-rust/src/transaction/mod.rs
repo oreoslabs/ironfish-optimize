@@ -124,6 +124,7 @@ pub struct ProposedTransaction {
 
 impl ProposedTransaction {
     pub fn new(version: TransactionVersion) -> Self {
+        log::info!("ProposedTransaction new");
         Self {
             version,
             spends: vec![],

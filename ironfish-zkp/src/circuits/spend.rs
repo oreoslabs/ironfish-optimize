@@ -88,27 +88,17 @@ impl Spend {
         } else {
             writer.write_u8(0)?;
         }
-        writer.write_all((self.auth_path.len() as u32).to_le_bytes().as_ref())?;
-        let bytes = self
-            .auth_path
-            .iter()
-            .flat_map(|auth_path| {
-                let mut res = vec![];
-                match auth_path {
-                    Some((val, flag)) => {
-                        res.push(1);
-                        res.extend(val.to_bytes_le());
-                        let flag = if *flag { 0u8 } else { 1u8 };
-                        res.push(flag);
-                    }
-                    None => {
-                        res.push(0);
-                    }
+        writer.write_all((self.auth_path.len() as u64).to_le_bytes().as_ref())?;
+        for auth_path in &self.auth_path {
+            match auth_path {
+                Some((val, flag)) => {
+                    writer.write_u8(1)?;
+                    writer.write_all(&val.to_bytes_le())?;
+                    writer.write_u8(*flag as u8)?;
                 }
-                res
-            })
-            .collect::<Vec<u8>>();
-        writer.write_all(bytes.as_ref())?;
+                None => writer.write_u8(0)?,
+            }
+        }
         if let Some(anchor) = self.anchor.borrow() {
             writer.write_u8(1)?;
             writer.write_all(anchor.to_bytes_le().as_ref())?;
@@ -151,14 +141,14 @@ impl Spend {
             reader.read_exact(&mut bytes)?;
             ar = Some(jubjub::Fr::from_bytes(&bytes).unwrap());
         }
-        let len = reader.read_u32::<LittleEndian>().unwrap();
+        let len = reader.read_u64::<LittleEndian>().unwrap();
         let mut auth_path = vec![];
         for _ in 0..len {
             if reader.read_u8()? == 1 {
                 let mut bytes = [0u8; 32];
                 reader.read_exact(&mut bytes)?;
                 let val = blstrs::Scalar::from_bytes_le(&bytes).unwrap();
-                let flag = reader.read_u8()? == 0;
+                let flag = reader.read_u8()? == 1;
                 auth_path.push(Some((val, flag)));
             } else {
                 auth_path.push(None);
